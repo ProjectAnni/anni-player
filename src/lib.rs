@@ -92,7 +92,7 @@ impl Playlist {
     }
 }
 
-pub struct AnnixPlayer {
+pub struct AnniPlayer {
     player: Player,
     playlist: RwLock<Playlist>,
     // receiver: Receiver<PlayerEvent>,
@@ -100,7 +100,7 @@ pub struct AnnixPlayer {
     _cache: (),
 }
 
-impl AnnixPlayer {
+impl AnniPlayer {
     pub fn new(provider: TypedPriorityProvider<ProviderProxy>) -> (Arc<Self>, JoinHandle<()>) {
         let (player, receiver) = Player::new();
 
@@ -149,6 +149,8 @@ impl AnnixPlayer {
 
     fn play_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
         log::info!("opening track: {track}");
+
+        // self.pause();
 
         let source = self
             .provider
@@ -208,16 +210,16 @@ impl AnnixPlayer {
         self.player.pause();
     }
 
+    pub fn stop(&self) {
+        self.player.stop();
+    }
+
     pub fn open_file(&self, path: String) -> anyhow::Result<()> {
         self.player.open_file(path, false)
     }
 
     pub fn set_volume(&self, volume: f32) {
         self.player.set_volume(volume);
-    }
-
-    pub fn stop(&self) {
-        self.player.stop();
     }
 
     pub fn seek(&self, position: u64) {
