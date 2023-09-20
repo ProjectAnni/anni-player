@@ -19,7 +19,9 @@ use anyhow::Context;
 use identifier::TrackIdentifier;
 // use once_cell::sync::Lazy;
 use provider::ProviderProxy;
-use reqwest::blocking::Response;
+use reqwest::blocking::{Client, Response};
+
+use crate::source::CachedHttpSource;
 // use symphonia::core::io::ReadOnlySource;
 // use tokio::runtime::Runtime;
 // use tokio_util::io::SyncIoBridge;
@@ -157,8 +159,14 @@ impl AnnixPlayer {
             .url()
             .clone();
 
-        let buffer_signal = Arc::new(AtomicBool::new(false));
-        let source = HttpStream::new(source.to_string(), Arc::clone(&buffer_signal))?;
+        let buffer_signal = Arc::new(AtomicBool::new(true));
+        // let source = HttpStream::new(source.to_string(), Arc::clone(&buffer_signal))?;
+        let source = CachedHttpSource::new(
+            source,
+            format!("D:/temp/{track}").as_ref(),
+            Client::new(),
+            Arc::clone(&buffer_signal),
+        )?;
 
         self.player.open(Box::new(source), buffer_signal, false);
 
