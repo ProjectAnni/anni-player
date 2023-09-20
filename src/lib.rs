@@ -97,7 +97,6 @@ pub struct AnniPlayer {
     playlist: RwLock<Playlist>,
     // receiver: Receiver<PlayerEvent>,
     provider: TypedPriorityProvider<ProviderProxy>,
-    _cache: (),
 }
 
 impl AnniPlayer {
@@ -109,7 +108,6 @@ impl AnniPlayer {
             playlist: Default::default(),
             // receiver,
             provider,
-            _cache: (),
         });
 
         let handle = thread::Builder::new()
