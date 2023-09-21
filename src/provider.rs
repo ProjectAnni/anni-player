@@ -9,12 +9,8 @@ pub struct ProviderProxy {
 }
 
 impl ProviderProxy {
-    pub fn new(url: String, auth: String) -> Self {
-        Self {
-            url,
-            auth,
-            client: Client::new(),
-        }
+    pub fn new(url: String, auth: String, client: Client) -> Self {
+        Self { url, auth, client }
     }
 
     pub fn format_url(&self, track: TrackIdentifier) -> String {

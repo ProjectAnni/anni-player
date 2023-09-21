@@ -96,8 +96,8 @@ impl Playlist {
 pub struct AnniPlayer {
     player: Player,
     playlist: RwLock<Playlist>,
-    // receiver: Receiver<PlayerEvent>,
-    provider: TypedPriorityProvider<ProviderProxy>,
+    pub client: Client,
+    provider: RwLock<TypedPriorityProvider<ProviderProxy>>,
 }
 
 impl AnniPlayer {
@@ -108,33 +108,25 @@ impl AnniPlayer {
             Self {
                 player,
                 playlist: Default::default(),
-                // receiver,
-                provider,
+                client: Client::new(),
+                provider: RwLock::new(provider),
             },
             receiver,
         )
     }
 
-    // pub fn open(&self, track: TrackIdentifier) -> anyhow::Result<()> {
-    // let mut pl = self.playlist.write().unwrap();
-    // pl.set_item(track);
-    //
-    // let next = pl.next().context("empty playlist")?;
-    // let album_id = next.album_id.to_string();
-    // let audio = RUNTIME.block_on(self.provider.get_audio(&album_id, next.disc_id, next.track_id, Range::FULL))?;
-    // let bridge = SyncIoBridge::new(audio.reader);
-    // self.player.open(Box::new(ReadOnlySource::new(bridge)) as _, Arc::new(AtomicBool::new(true)), false);
-    //
-    // todo!()
-    // }
+    pub fn add_provider(&self, url: String, auth: String, priority: i32) {
+        let mut provider = self.provider.write().unwrap();
+
+        provider.insert(ProviderProxy::new(url, auth, self.client.clone()), priority);
+    }
 
     fn play_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
         log::info!("opening track: {track}");
 
-        // self.pause();
+        let provider = self.provider.read().unwrap();
 
-        let source = self
-            .provider
+        let source = provider
             .providers()
             .map(|p| p.head(track))
             .collect::<One<Response>>()
@@ -147,7 +139,7 @@ impl AnniPlayer {
         let source = CachedHttpSource::new(
             source,
             format!("D:/temp/{track}").as_ref(),
-            Client::new(),
+            self.client.clone(),
             Arc::clone(&buffer_signal),
         )?;
 
