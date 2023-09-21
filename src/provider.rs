@@ -23,14 +23,14 @@ impl ProviderProxy {
 
     pub fn get(&self, track: TrackIdentifier) -> reqwest::Result<Response> {
         self.client
-            .get(&format!("{}/{}?auth={}", self.url, track, self.auth))
+            .get(format!("{}/{}?auth={}", self.url, track, self.auth))
             // .header("Authorization", &self.auth)
             .send()
     }
 
     pub fn head(&self, track: TrackIdentifier) -> reqwest::Result<Response> {
         self.client
-            .get(&format!("{}/{}?auth={}", self.url, track, self.auth))
+            .get(format!("{}/{}?auth={}", self.url, track, self.auth))
             // .header("Authorization", &self.auth)
             .send()
     }

@@ -12,7 +12,7 @@ use std::{
         mpsc::{self, Receiver},
         Arc, RwLock,
     },
-    thread::{self, JoinHandle},
+    thread,
 };
 
 use anni_playback::{types::PlayerEvent, Controls, Decoder};
@@ -76,7 +76,7 @@ impl Playlist {
         self.tracks.push(track);
     }
 
-    pub fn next(&mut self) -> Option<TrackIdentifier> {
+    pub fn next_track(&mut self) -> Option<TrackIdentifier> {
         let pos = match self.pos.as_mut() {
             Some(pos) => {
                 *pos += 1;
@@ -85,7 +85,7 @@ impl Playlist {
             None => self.pos.insert(0),
         };
 
-        self.tracks.get(*pos).map(|track| *track)
+        self.tracks.get(*pos).copied()
     }
 
     pub fn push(&mut self, track: TrackIdentifier) {
@@ -169,7 +169,7 @@ impl AnniPlayer {
     pub fn play_next(&self) -> anyhow::Result<()> {
         let mut pl = self.playlist.write().unwrap();
 
-        let track = pl.next().context("end of playlist")?;
+        let track = pl.next_track().context("end of playlist")?;
         self.play_track(track)?;
         self.play();
 

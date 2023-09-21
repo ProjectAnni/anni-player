@@ -1,13 +1,12 @@
 use std::{
     fs::File,
-    io::{self, ErrorKind, Read, Seek, Write},
+    io::{ErrorKind, Read, Seek, Write},
     path::Path,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     thread,
-    time::Duration,
 };
 
 use anni_playback::types::MediaSource;
@@ -55,10 +54,9 @@ impl CachedHttpSource {
                             break;
                         }
                         Ok(n) => {
-                            match cache.write_all(&buf[..n]) {
-                                Err(e) => log::error!("{e}"),
-                                _ => {}
-                            };
+                            if let Err(e) = cache.write_all(&buf[..n]) {
+                                log::error!("{e}")
+                            }
                             let _ = cache.flush();
 
                             log::trace!("wrote {n} bytes");
