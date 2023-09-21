@@ -3,6 +3,8 @@ pub mod identifier;
 pub mod provider;
 pub mod source;
 
+pub use anni_provider::providers::TypedPriorityProvider;
+
 use std::{
     ops::Deref,
     sync::{
@@ -13,8 +15,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use anni_playback::{sources::http::HttpStream, types::PlayerEvent, Controls, Decoder};
-use anni_provider::providers::TypedPriorityProvider;
+use anni_playback::{types::PlayerEvent, Controls, Decoder};
 use anyhow::Context;
 use identifier::TrackIdentifier;
 // use once_cell::sync::Lazy;
@@ -100,36 +101,18 @@ pub struct AnniPlayer {
 }
 
 impl AnniPlayer {
-    pub fn new(provider: TypedPriorityProvider<ProviderProxy>) -> (Arc<Self>, JoinHandle<()>) {
+    pub fn new(provider: TypedPriorityProvider<ProviderProxy>) -> (Self, Receiver<PlayerEvent>) {
         let (player, receiver) = Player::new();
 
-        let player = Arc::new(Self {
-            player,
-            playlist: Default::default(),
-            // receiver,
-            provider,
-        });
-
-        let handle = thread::Builder::new()
-            .name("anni-player".to_owned())
-            .spawn({
-                let player = Arc::clone(&player);
-                move || loop {
-                    if let Ok(event) = receiver.recv() {
-                        log::trace!("received event: {event:#?}");
-                        match event {
-                            PlayerEvent::Stop => match player.play_next() {
-                                Ok(_) => player.play(),
-                                Err(e) => log::error!("{e}"),
-                            },
-                            _ => {}
-                        }
-                    }
-                }
-            })
-            .unwrap();
-
-        (player, handle)
+        (
+            Self {
+                player,
+                playlist: Default::default(),
+                // receiver,
+                provider,
+            },
+            receiver,
+        )
     }
 
     // pub fn open(&self, track: TrackIdentifier) -> anyhow::Result<()> {
