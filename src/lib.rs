@@ -1,4 +1,3 @@
-pub mod cache;
 pub mod identifier;
 pub mod provider;
 pub mod source;
