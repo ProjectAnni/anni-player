@@ -6,6 +6,7 @@ pub use anni_provider::providers::TypedPriorityProvider;
 
 use std::{
     ops::Deref,
+    path::PathBuf,
     sync::{
         atomic::AtomicBool,
         mpsc::{self, Receiver},
@@ -97,10 +98,14 @@ pub struct AnniPlayer {
     playlist: RwLock<Playlist>,
     pub client: Client,
     provider: RwLock<TypedPriorityProvider<ProviderProxy>>,
+    cache_path: PathBuf, // root of cache
 }
 
 impl AnniPlayer {
-    pub fn new(provider: TypedPriorityProvider<ProviderProxy>) -> (Self, Receiver<PlayerEvent>) {
+    pub fn new(
+        provider: TypedPriorityProvider<ProviderProxy>,
+        cache_path: PathBuf,
+    ) -> (Self, Receiver<PlayerEvent>) {
         let (player, receiver) = Player::new();
 
         (
@@ -109,6 +114,7 @@ impl AnniPlayer {
                 playlist: Default::default(),
                 client: Client::new(),
                 provider: RwLock::new(provider),
+                cache_path,
             },
             receiver,
         )
@@ -137,7 +143,7 @@ impl AnniPlayer {
         // let source = HttpStream::new(source.to_string(), Arc::clone(&buffer_signal))?;
         let source = CachedHttpSource::new(
             source,
-            format!("D:/temp/{track}").as_ref(),
+            &self.cache_path.join(track.to_string()),
             self.client.clone(),
             Arc::clone(&buffer_signal),
         )?;
