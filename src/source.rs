@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{create_dir_all, File},
     io::{ErrorKind, Read, Seek, Write},
     path::Path,
     sync::{
@@ -20,6 +20,7 @@ pub struct CachedHttpSource {
 }
 
 impl CachedHttpSource {
+    /// `cache_path` is the path to cache file.
     pub fn new(
         url: Url,
         cache_path: &Path,
@@ -37,6 +38,8 @@ impl CachedHttpSource {
                 buffer_signal,
             })
         } else {
+            create_parent(cache_path)?;
+
             let buf_len = Arc::new(AtomicUsize::new(0));
 
             thread::spawn({
@@ -125,5 +128,16 @@ impl MediaSource for CachedHttpSource {
         let len = self.buf_len.load(Ordering::Acquire) as u64;
         log::trace!("returning buf_len {len}");
         Some(len)
+    }
+}
+
+fn create_parent(p: &Path) -> std::io::Result<()> {
+    let mut ancestor = p.ancestors();
+    let parent = ancestor.nth(1).unwrap();
+
+    match create_dir_all(parent) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(e),
     }
 }
