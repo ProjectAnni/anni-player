@@ -128,6 +128,12 @@ impl AnniPlayer {
         provider.insert(ProviderProxy::new(url, auth, self.client.clone()), priority);
     }
 
+    pub fn clear_provider(&self) {
+        let mut provider = self.provider.write().unwrap();
+
+        *provider = TypedPriorityProvider::new(vec![]);
+    }
+
     fn play_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
         log::info!("opening track: {track}");
 
