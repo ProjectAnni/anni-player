@@ -2,6 +2,7 @@ pub mod identifier;
 pub mod provider;
 pub mod source;
 
+pub use anni_playback;
 pub use anni_provider::providers::TypedPriorityProvider;
 
 use std::{
@@ -16,11 +17,11 @@ use std::{
 };
 
 use anni_playback::{types::PlayerEvent, Controls, Decoder};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use identifier::TrackIdentifier;
 // use once_cell::sync::Lazy;
 use provider::ProviderProxy;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::Client;
 
 use crate::source::CachedHttpSource;
 // use symphonia::core::io::ReadOnlySource;
@@ -134,13 +135,13 @@ impl AnniPlayer {
         let source = provider
             .providers()
             .map(|p| p.head(track))
-            .collect::<One<Response>>()
-            .unwrap()
+            .collect::<One<_>>()
+            .0
+            .ok_or(anyhow!("No audio"))?
             .url()
             .clone();
 
         let buffer_signal = Arc::new(AtomicBool::new(true));
-        // let source = HttpStream::new(source.to_string(), Arc::clone(&buffer_signal))?;
         let source = CachedHttpSource::new(
             source,
             &self.cache_path.join(track.to_string()),
@@ -206,12 +207,6 @@ impl AnniPlayer {
 }
 
 struct One<T>(pub Option<T>);
-
-impl<T> One<T> {
-    fn unwrap(self) -> T {
-        self.0.unwrap()
-    }
-}
 
 impl<T, E: std::error::Error> FromIterator<Result<T, E>> for One<T> {
     fn from_iter<I: IntoIterator<Item = Result<T, E>>>(iter: I) -> Self {
