@@ -7,6 +7,7 @@ pub use anni_provider::providers::TypedPriorityProvider;
 
 use std::{
     ops::Deref,
+    panic::{RefUnwindSafe, UnwindSafe},
     path::PathBuf,
     sync::{
         atomic::AtomicBool,
@@ -95,7 +96,7 @@ impl Playlist {
 }
 
 pub struct AnniPlayer {
-    player: Player,
+    pub player: Player,
     playlist: RwLock<Playlist>,
     pub client: Client,
     provider: RwLock<TypedPriorityProvider<ProviderProxy>>,
@@ -205,6 +206,9 @@ impl AnniPlayer {
         self.player.seek(position);
     }
 }
+
+impl UnwindSafe for AnniPlayer {}
+impl RefUnwindSafe for AnniPlayer {}
 
 struct One<T>(pub Option<T>);
 
