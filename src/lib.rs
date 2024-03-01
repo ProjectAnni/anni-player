@@ -18,13 +18,13 @@ use std::{
 };
 
 use anni_playback::{types::PlayerEvent, Controls, Decoder};
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use identifier::TrackIdentifier;
 // use once_cell::sync::Lazy;
 use provider::ProviderProxy;
 use reqwest::blocking::Client;
 
-use crate::source::CachedHttpSource;
+use crate::source::CachedAnnilSource;
 // use symphonia::core::io::ReadOnlySource;
 // use tokio::runtime::Runtime;
 // use tokio_util::io::SyncIoBridge;
@@ -139,21 +139,13 @@ impl AnniPlayer {
 
         let provider = self.provider.read().unwrap();
 
-        let source = provider
-            .providers()
-            .map(|p| p.head(track))
-            .collect::<One<_>>()
-            .0
-            .ok_or(anyhow!("No audio"))?
-            .url()
-            .clone();
-
         let buffer_signal = Arc::new(AtomicBool::new(true));
-        let source = CachedHttpSource::new(
-            source,
+        let source = CachedAnnilSource::new(
+            track,
             &self.cache_path.join(track.to_string()),
             self.client.clone(),
-            Arc::clone(&buffer_signal),
+            &provider,
+            buffer_signal.clone(),
         )?;
 
         self.player.open(Box::new(source), buffer_signal, false);
@@ -215,21 +207,6 @@ impl AnniPlayer {
 
 impl UnwindSafe for AnniPlayer {}
 impl RefUnwindSafe for AnniPlayer {}
-
-struct One<T>(pub Option<T>);
-
-impl<T, E: std::error::Error> FromIterator<Result<T, E>> for One<T> {
-    fn from_iter<I: IntoIterator<Item = Result<T, E>>>(iter: I) -> Self {
-        for item in iter {
-            match item {
-                Ok(r) => return Self(Some(r)),
-                Err(e) => log::warn!("{e}"),
-            }
-        }
-
-        Self(None)
-    }
-}
 
 // pub struct SyncReadWrapper<T> {
 //     inner: SyncIoBridge<T>,
