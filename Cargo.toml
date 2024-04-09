@@ -6,13 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-playback", rev = "a91695e" }
-# anni-playback = { path = "../anni/anni-playback" }
-anni-provider = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-provider", default-features = false, features = ["priority"] }
+anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-playback", rev = "734f57e" }
+anni-provider = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-provider", default-features = false, features = [
+    "priority",
+] }
 
 anyhow = { version = "1.0.75", features = ["backtrace"] }
 uuid = "1.4.1"
-reqwest = { version = "0.11.20", default-features = false, features = ["blocking", "rustls-tls"] }
+reqwest = { version = "0.11.20", default-features = false, features = [
+    "blocking",
+    "rustls-tls",
+] }
 log = "0.4.20"
 env_logger = "0.10.0"
 
