@@ -76,6 +76,7 @@ impl CachedHttpSource {
                     match response.read(&mut buf) {
                         Ok(0) => {
                             is_buffering.store(false, Ordering::Release);
+                            log::info!("{identifier} reached eof");
                             break;
                         }
                         Ok(n) => {
@@ -170,7 +171,12 @@ impl CachedAnnilSource {
     ) -> anyhow::Result<Self> {
         let mut source = provider
             .providers()
-            .filter_map(|p| p.head(track).inspect_err(|e| log::warn!("{e}")).ok())
+            .filter_map(|p| {
+                p.head(track)
+                    .and_then(|r| r.error_for_status())
+                    .inspect_err(|e| log::warn!("{e}"))
+                    .ok()
+            })
             .map(|r| r.url().clone());
 
         CachedHttpSource::new(track, || source.next(), cache_path, client, buffer_signal).map(Self)
