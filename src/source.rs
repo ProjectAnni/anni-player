@@ -22,7 +22,9 @@ const BUF_SIZE: usize = 1024 * 64; // 64k
 pub struct CachedHttpSource {
     cache: File,
     buf_len: Arc<AtomicUsize>,
-    pos: usize,
+    pos: Arc<AtomicUsize>,
+    is_buffering: Arc<AtomicBool>,
+    #[allow(unused)]
     buffer_signal: Arc<AtomicBool>,
 }
 
@@ -34,12 +36,16 @@ impl CachedHttpSource {
         client: Client,
         buffer_signal: Arc<AtomicBool>,
     ) -> anyhow::Result<Self> {
-        let (cache, buf_len) = if cache_path.exists() {
+        let (cache, buf_len, is_buffering) = if cache_path.exists() {
             // todo: varify cache
             let cache = File::open(cache_path)?;
             let buf_len = cache.metadata()?.len() as usize;
 
-            (cache, Arc::new(AtomicUsize::new(buf_len)))
+            (
+                cache,
+                Arc::new(AtomicUsize::new(buf_len)),
+                Arc::new(AtomicBool::new(false)),
+            )
         } else {
             create_parent(cache_path)?;
 
@@ -50,6 +56,7 @@ impl CachedHttpSource {
                 .open(cache_path)?;
 
             let buf_len = Arc::new(AtomicUsize::new(0));
+            let is_buffering = Arc::new(AtomicBool::new(true));
 
             thread::spawn({
                 let mut response = client.get(url().ok_or(anyhow!("no audio"))?).send()?;
@@ -57,12 +64,12 @@ impl CachedHttpSource {
                 let mut cache = cache.try_clone()?;
                 let buf_len = Arc::clone(&buf_len);
                 let mut buf = [0; BUF_SIZE];
-                let buffer_signal = Arc::clone(&buffer_signal);
+                let is_buffering = Arc::clone(&is_buffering);
 
                 move || loop {
                     match response.read(&mut buf) {
                         Ok(0) => {
-                            buffer_signal.store(false, Ordering::Relaxed);
+                            is_buffering.store(false, Ordering::Release);
                             break;
                         }
                         Ok(n) => {
@@ -71,23 +78,27 @@ impl CachedHttpSource {
                             }
                             let _ = cache.flush();
 
-                            log::trace!("wrote {n} bytes");
+                            // log::trace!("wrote {n} bytes");
 
                             buf_len.fetch_add(n, Ordering::AcqRel);
                         }
                         Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                        Err(e) => log::error!("{e}"),
+                        Err(e) => {
+                            log::error!("{e}");
+                            is_buffering.store(false, Ordering::Release);
+                        }
                     }
                 }
             });
 
-            (cache, buf_len)
+            (cache, buf_len, is_buffering)
         };
 
         Ok(Self {
             cache,
             buf_len,
-            pos: 0,
+            pos: Arc::new(AtomicUsize::new(0)),
+            is_buffering,
             buffer_signal,
         })
     }
@@ -101,11 +112,11 @@ impl Read for CachedHttpSource {
         // Ok(n)
 
         loop {
-            let has_buf = self.buf_len.load(Ordering::Acquire) > self.pos;
+            let has_buf = self.buf_len.load(Ordering::Acquire) > self.pos.load(Ordering::Acquire);
 
-            if has_buf || !self.buffer_signal.load(Ordering::Acquire) {
+            if has_buf || !self.is_buffering.load(Ordering::Acquire) {
                 let n = self.cache.read(buf)?;
-                self.pos += n;
+                self.pos.fetch_add(n, Ordering::Release);
                 log::trace!("read {n} bytes");
                 break Ok(n);
             }
@@ -116,7 +127,7 @@ impl Read for CachedHttpSource {
 impl Seek for CachedHttpSource {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         let p = self.cache.seek(pos)?;
-        self.pos = p as usize;
+        self.pos.store(p as usize, Ordering::Release);
         Ok(p)
     }
 }
