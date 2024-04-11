@@ -29,7 +29,7 @@ pub struct CachedHttpSource {
 impl CachedHttpSource {
     /// `cache_path` is the path to cache file.
     pub fn new(
-        url: Url,
+        url: impl FnOnce() -> Option<Url>,
         cache_path: &Path,
         client: Client,
         buffer_signal: Arc<AtomicBool>,
@@ -52,7 +52,7 @@ impl CachedHttpSource {
             let buf_len = Arc::new(AtomicUsize::new(0));
 
             thread::spawn({
-                let mut response = client.get(url).send()?;
+                let mut response = client.get(url().ok_or(anyhow!("no audio"))?).send()?;
 
                 let mut cache = cache.try_clone()?;
                 let buf_len = Arc::clone(&buf_len);
@@ -143,16 +143,12 @@ impl CachedAnnilSource {
         provider: &TypedPriorityProvider<ProviderProxy>,
         buffer_signal: Arc<AtomicBool>,
     ) -> anyhow::Result<Self> {
-        let source = provider
+        let mut source = provider
             .providers()
-            .map(|p| p.head(track))
-            .collect::<One<_>>()
-            .0
-            .ok_or(anyhow!("No audio"))?
-            .url()
-            .clone();
+            .filter_map(|p| p.head(track).inspect_err(|e| log::warn!("{e}")).ok())
+            .map(|r| r.url().clone());
 
-        CachedHttpSource::new(source, cache_path, client, buffer_signal).map(Self)
+        CachedHttpSource::new(|| source.next(), cache_path, client, buffer_signal).map(Self)
     }
 }
 
@@ -186,20 +182,5 @@ fn create_parent(p: &Path) -> std::io::Result<()> {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
-    }
-}
-
-struct One<T>(pub Option<T>);
-
-impl<T, E: std::error::Error> FromIterator<Result<T, E>> for One<T> {
-    fn from_iter<I: IntoIterator<Item = Result<T, E>>>(iter: I) -> Self {
-        for item in iter {
-            match item {
-                Ok(r) => return Self(Some(r)),
-                Err(e) => log::warn!("{e}"),
-            }
-        }
-
-        Self(None)
     }
 }
