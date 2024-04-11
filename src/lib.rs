@@ -156,10 +156,7 @@ impl AnniPlayer {
     }
 
     pub fn open(&self, track: TrackIdentifier) -> anyhow::Result<()> {
-        let mut pl = self.playlist.write().unwrap();
-        pl.set_item(track);
-
-        self.play_track(track)?;
+        self.set_track(track)?;
         self.play();
 
         Ok(())
@@ -173,6 +170,14 @@ impl AnniPlayer {
         self.play();
 
         Ok(())
+    }
+
+    pub fn set_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
+        log::info!("setting track {track} to playlist");
+
+        let mut pl = self.playlist.write().unwrap();
+        pl.set_item(track);
+        self.play_track(track)
     }
 
     pub fn push_track(&self, track: TrackIdentifier) {
