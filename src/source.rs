@@ -20,6 +20,7 @@ use crate::{identifier::TrackIdentifier, provider::ProviderProxy};
 const BUF_SIZE: usize = 1024 * 64; // 64k
 
 pub struct CachedHttpSource {
+    identifier: TrackIdentifier,
     cache: File,
     buf_len: Arc<AtomicUsize>,
     pos: Arc<AtomicUsize>,
@@ -31,38 +32,43 @@ pub struct CachedHttpSource {
 impl CachedHttpSource {
     /// `cache_path` is the path to cache file.
     pub fn new(
+        identifier: TrackIdentifier,
         url: impl FnOnce() -> Option<Url>,
         cache_path: &Path,
         client: Client,
         buffer_signal: Arc<AtomicBool>,
     ) -> anyhow::Result<Self> {
-        let (cache, buf_len, is_buffering) = if cache_path.exists() {
+        if cache_path.exists() {
             // todo: varify cache
             let cache = File::open(cache_path)?;
             let buf_len = cache.metadata()?.len() as usize;
-
-            (
+            Ok(Self {
+                identifier,
                 cache,
-                Arc::new(AtomicUsize::new(buf_len)),
-                Arc::new(AtomicBool::new(false)),
-            )
+                buf_len: Arc::new(AtomicUsize::new(buf_len)),
+                pos: Arc::new(AtomicUsize::new(0)),
+                is_buffering: Arc::new(AtomicBool::new(false)),
+                buffer_signal,
+            })
         } else {
             create_parent(cache_path)?;
 
             let cache = File::options()
-                .write(true)
                 .read(true)
+                .append(true)
                 .create(true)
                 .open(cache_path)?;
 
             let buf_len = Arc::new(AtomicUsize::new(0));
             let is_buffering = Arc::new(AtomicBool::new(true));
+            let pos = Arc::new(AtomicUsize::new(0));
 
             thread::spawn({
                 let mut response = client.get(url().ok_or(anyhow!("no audio"))?).send()?;
 
                 let mut cache = cache.try_clone()?;
                 let buf_len = Arc::clone(&buf_len);
+                let pos = Arc::clone(&pos);
                 let mut buf = [0; BUF_SIZE];
                 let is_buffering = Arc::clone(&is_buffering);
 
@@ -73,12 +79,15 @@ impl CachedHttpSource {
                             break;
                         }
                         Ok(n) => {
+                            let pos = pos.load(Ordering::Acquire);
                             if let Err(e) = cache.write_all(&buf[..n]) {
                                 log::error!("{e}")
                             }
-                            let _ = cache.flush();
 
-                            // log::trace!("wrote {n} bytes");
+                            log::trace!("wrote {n} bytes to {identifier}");
+
+                            let _ = cache.seek(std::io::SeekFrom::Start(pos as u64));
+                            let _ = cache.flush();
 
                             buf_len.fetch_add(n, Ordering::AcqRel);
                         }
@@ -91,16 +100,15 @@ impl CachedHttpSource {
                 }
             });
 
-            (cache, buf_len, is_buffering)
-        };
-
-        Ok(Self {
-            cache,
-            buf_len,
-            pos: Arc::new(AtomicUsize::new(0)),
-            is_buffering,
-            buffer_signal,
-        })
+            Ok(Self {
+                identifier,
+                cache,
+                buf_len,
+                pos,
+                is_buffering,
+                buffer_signal,
+            })
+        }
     }
 }
 
@@ -113,12 +121,18 @@ impl Read for CachedHttpSource {
 
         loop {
             let has_buf = self.buf_len.load(Ordering::Acquire) > self.pos.load(Ordering::Acquire);
+            let is_buffering = self.is_buffering.load(Ordering::Acquire);
 
-            if has_buf || !self.is_buffering.load(Ordering::Acquire) {
+            if has_buf {
                 let n = self.cache.read(buf)?;
-                self.pos.fetch_add(n, Ordering::Release);
-                log::trace!("read {n} bytes");
+                log::trace!("read {n} bytes from {}", self.identifier);
+                if n == 0 {
+                    continue;
+                }
+                self.pos.fetch_add(n, Ordering::AcqRel);
                 break Ok(n);
+            } else if !is_buffering {
+                break Ok(0);
             }
         }
     }
@@ -159,7 +173,7 @@ impl CachedAnnilSource {
             .filter_map(|p| p.head(track).inspect_err(|e| log::warn!("{e}")).ok())
             .map(|r| r.url().clone());
 
-        CachedHttpSource::new(|| source.next(), cache_path, client, buffer_signal).map(Self)
+        CachedHttpSource::new(track, || source.next(), cache_path, client, buffer_signal).map(Self)
     }
 }
 
