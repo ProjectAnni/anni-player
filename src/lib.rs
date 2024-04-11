@@ -137,6 +137,8 @@ impl AnniPlayer {
     fn play_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
         log::info!("opening track: {track}");
 
+        self.player.pause();
+
         let provider = self.provider.read().unwrap();
 
         let buffer_signal = Arc::new(AtomicBool::new(true));
