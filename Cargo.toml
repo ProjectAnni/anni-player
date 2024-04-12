@@ -10,6 +10,13 @@ anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "an
 anni-provider = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-provider", default-features = false, features = [
     "priority",
 ] }
+symphonia = { version = "0.5.4", default-features = false, features = [
+    # codecs
+    "aac",
+    "flac",
+    # formats
+    "ogg",
+] }
 
 anyhow = { version = "1.0.75", features = ["backtrace"] }
 uuid = "1.4.1"
@@ -19,6 +26,7 @@ reqwest = { version = "0.11.20", default-features = false, features = [
 ] }
 log = "0.4.20"
 env_logger = "0.10.0"
+once_cell = "1"
 
 [patch.crates-io]
 cpal = { git = "https://github.com/sidit77/cpal.git", branch = "master" }

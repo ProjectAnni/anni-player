@@ -13,11 +13,29 @@ use anni_playback::types::MediaSource;
 use anni_provider::providers::TypedPriorityProvider;
 use anyhow::anyhow;
 
+use once_cell::sync::Lazy;
 use reqwest::{blocking::Client, Url};
+use symphonia::{
+    core::{
+        codecs::{CodecRegistry, DecoderOptions},
+        formats::FormatOptions,
+        io::MediaSourceStream,
+        meta::MetadataOptions,
+        probe::Hint,
+    },
+    default::{get_probe, register_enabled_codecs},
+};
 
 use crate::{identifier::TrackIdentifier, provider::ProviderProxy};
 
 const BUF_SIZE: usize = 1024 * 64; // 64k
+
+// todo: enable opus support (which is private code in anni-playback)
+static CODEC_REGISTRY: Lazy<CodecRegistry> = Lazy::new(|| {
+    let mut registry = CodecRegistry::new();
+    register_enabled_codecs(&mut registry);
+    registry
+});
 
 pub struct CachedHttpSource {
     identifier: TrackIdentifier,
@@ -39,77 +57,82 @@ impl CachedHttpSource {
         buffer_signal: Arc<AtomicBool>,
     ) -> anyhow::Result<Self> {
         if cache_path.exists() {
-            // todo: varify cache
-            let cache = File::open(cache_path)?;
-            let buf_len = cache.metadata()?.len() as usize;
-            Ok(Self {
-                identifier,
-                cache,
-                buf_len: Arc::new(AtomicUsize::new(buf_len)),
-                pos: Arc::new(AtomicUsize::new(0)),
-                is_buffering: Arc::new(AtomicBool::new(false)),
-                buffer_signal,
-            })
-        } else {
-            create_parent(cache_path)?;
+            // todo: treat errors properly (e.g. IO errors)
+            if validate_audio(cache_path).unwrap_or(false) {
+                let cache = File::open(cache_path)?;
+                let buf_len = cache.metadata()?.len() as usize;
+    
+                return Ok(Self {
+                    identifier,
+                    cache,
+                    buf_len: Arc::new(AtomicUsize::new(buf_len)),
+                    pos: Arc::new(AtomicUsize::new(0)),
+                    is_buffering: Arc::new(AtomicBool::new(false)),
+                    buffer_signal,
+                });
+            }
 
-            let cache = File::options()
-                .read(true)
-                .append(true)
-                .create(true)
-                .open(cache_path)?;
+            log::warn!("cache of {identifier} exists but is invalid");
+        }
 
-            let buf_len = Arc::new(AtomicUsize::new(0));
-            let is_buffering = Arc::new(AtomicBool::new(true));
-            let pos = Arc::new(AtomicUsize::new(0));
+        create_parent(cache_path)?;
 
-            thread::spawn({
-                let mut response = client.get(url().ok_or(anyhow!("no audio"))?).send()?;
+        let cache = File::options()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(cache_path)?;
 
-                let mut cache = cache.try_clone()?;
-                let buf_len = Arc::clone(&buf_len);
-                let pos = Arc::clone(&pos);
-                let mut buf = [0; BUF_SIZE];
-                let is_buffering = Arc::clone(&is_buffering);
+        let buf_len = Arc::new(AtomicUsize::new(0));
+        let is_buffering = Arc::new(AtomicBool::new(true));
+        let pos = Arc::new(AtomicUsize::new(0));
 
-                move || loop {
-                    match response.read(&mut buf) {
-                        Ok(0) => {
-                            is_buffering.store(false, Ordering::Release);
-                            log::info!("{identifier} reached eof");
-                            break;
+        thread::spawn({
+            let mut response = client.get(url().ok_or(anyhow!("no audio"))?).send()?;
+
+            let mut cache = cache.try_clone()?;
+            let buf_len = Arc::clone(&buf_len);
+            let pos = Arc::clone(&pos);
+            let mut buf = [0; BUF_SIZE];
+            let is_buffering = Arc::clone(&is_buffering);
+
+            move || loop {
+                match response.read(&mut buf) {
+                    Ok(0) => {
+                        is_buffering.store(false, Ordering::Release);
+                        log::info!("{identifier} reached eof");
+                        break;
+                    }
+                    Ok(n) => {
+                        let pos = pos.load(Ordering::Acquire);
+                        if let Err(e) = cache.write_all(&buf[..n]) {
+                            log::error!("{e}")
                         }
-                        Ok(n) => {
-                            let pos = pos.load(Ordering::Acquire);
-                            if let Err(e) = cache.write_all(&buf[..n]) {
-                                log::error!("{e}")
-                            }
 
-                            log::trace!("wrote {n} bytes to {identifier}");
+                        log::trace!("wrote {n} bytes to {identifier}");
 
-                            let _ = cache.seek(std::io::SeekFrom::Start(pos as u64));
-                            let _ = cache.flush();
+                        let _ = cache.seek(std::io::SeekFrom::Start(pos as u64));
+                        let _ = cache.flush();
 
-                            buf_len.fetch_add(n, Ordering::AcqRel);
-                        }
-                        Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                        Err(e) => {
-                            log::error!("{e}");
-                            is_buffering.store(false, Ordering::Release);
-                        }
+                        buf_len.fetch_add(n, Ordering::AcqRel);
+                    }
+                    Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                    Err(e) => {
+                        log::error!("{e}");
+                        is_buffering.store(false, Ordering::Release);
                     }
                 }
-            });
+            }
+        });
 
-            Ok(Self {
-                identifier,
-                cache,
-                buf_len,
-                pos,
-                is_buffering,
-                buffer_signal,
-            })
-        }
+        Ok(Self {
+            identifier,
+            cache,
+            buf_len,
+            pos,
+            is_buffering,
+            buffer_signal,
+        })
     }
 }
 
@@ -214,4 +237,27 @@ fn create_parent(p: &Path) -> std::io::Result<()> {
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
     }
+}
+
+fn validate_audio(p: &Path) -> symphonia::core::errors::Result<bool> {
+    let source = MediaSourceStream::new(Box::new(File::open(p)?), Default::default());
+
+    let format_opts = FormatOptions::default();
+    let metadata_opts = MetadataOptions::default();
+
+    let probed = get_probe().format(&Hint::new(), source, &format_opts, &metadata_opts)?;
+
+    let mut format_reader = probed.format;
+    let track = match format_reader.default_track() {
+        Some(track) => track,
+        None => return Ok(false),
+    };
+
+    let mut decoder = CODEC_REGISTRY.make(&track.codec_params, &DecoderOptions { verify: true })?;
+
+    while let Ok(packet) = format_reader.next_packet() {
+        let _ = decoder.decode(&packet)?;
+    }
+
+    Ok(decoder.finalize().verify_ok.unwrap_or(false))
 }
