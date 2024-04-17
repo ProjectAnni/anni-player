@@ -14,19 +14,19 @@ impl ProviderProxy {
     }
 
     pub fn format_url(&self, track: TrackIdentifier) -> String {
-        format!("{}/{}?auth={}", self.url, track, self.auth)
+        format!("{}/{}?auth={}&quality=lossless", self.url, track, self.auth)
     }
 
     pub fn get(&self, track: TrackIdentifier) -> reqwest::Result<Response> {
         self.client
-            .get(format!("{}/{}?auth={}", self.url, track, self.auth))
+            .get(self.format_url(track))
             // .header("Authorization", &self.auth)
             .send()
     }
 
     pub fn head(&self, track: TrackIdentifier) -> reqwest::Result<Response> {
         self.client
-            .get(format!("{}/{}?auth={}", self.url, track, self.auth))
+            .get(self.format_url(track))
             // .header("Authorization", &self.auth)
             .send()
     }
