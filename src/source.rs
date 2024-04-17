@@ -172,7 +172,7 @@ impl Seek for CachedHttpSource {
 
 impl MediaSource for CachedHttpSource {
     fn is_seekable(&self) -> bool {
-        true
+        !self.is_buffering.load(Ordering::Relaxed)
     }
 
     fn byte_len(&self) -> Option<u64> {
