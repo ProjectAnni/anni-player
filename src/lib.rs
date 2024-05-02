@@ -1,9 +1,11 @@
+pub mod cache;
 pub mod identifier;
 pub mod provider;
 pub mod source;
 
 pub use anni_playback;
 pub use anni_provider::providers::TypedPriorityProvider;
+use cache::CacheStore;
 
 use std::{
     ops::Deref,
@@ -31,6 +33,7 @@ use crate::source::CachedAnnilSource;
 
 // static RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
 
+#[derive(Clone)]
 pub struct Player {
     pub controls: Controls,
 }
@@ -100,7 +103,7 @@ pub struct AnniPlayer {
     playlist: RwLock<Playlist>,
     pub client: Client,
     provider: RwLock<TypedPriorityProvider<ProviderProxy>>,
-    cache_path: PathBuf, // root of cache
+    cache_store: CacheStore, // root of cache
 }
 
 impl AnniPlayer {
@@ -116,7 +119,7 @@ impl AnniPlayer {
                 playlist: Default::default(),
                 client: Client::new(),
                 provider: RwLock::new(provider),
-                cache_path,
+                cache_store: CacheStore::new(cache_path),
             },
             receiver,
         )
@@ -144,7 +147,7 @@ impl AnniPlayer {
         let buffer_signal = Arc::new(AtomicBool::new(true));
         let source = CachedAnnilSource::new(
             track,
-            &self.cache_path.join(track.to_string()),
+            &self.cache_store,
             self.client.clone(),
             &provider,
             buffer_signal.clone(),
