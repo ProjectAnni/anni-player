@@ -35,7 +35,7 @@ impl CacheStore {
         Self { base }
     }
 
-    // Returns the path to given `track`
+    /// Returns the path to given `track`
     pub fn loaction_of(&self, track: TrackIdentifier) -> PathBuf {
         let mut tmp = self.base.clone();
         tmp.extend([
@@ -46,6 +46,13 @@ impl CacheStore {
         tmp
     }
 
+    /// Attempts to open a cache file corresponding to `track` and validates it.
+    ///
+    /// On success, returns a `Result<File, File>`.
+    /// If the cache exists and is valid, opens it in read mode and returns an `Ok(_)`.
+    /// Otherwise, opens or creates a cache file in append mode and returns an `Err(_)`.
+    /// 
+    /// On error, an [`Error`](std::io::Error) is returned.
     pub fn acquire(&self, track: TrackIdentifier) -> io::Result<Result<File, File>> {
         let path = self.loaction_of(track);
 
