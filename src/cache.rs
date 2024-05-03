@@ -64,7 +64,7 @@ impl CacheStore {
             .append(true)
             .create(true)
             .open(path)
-            .map(|f| Ok(f))
+            .map(|f| Err(f))
     }
 
     pub fn add(&self, path: &Path, track: TrackIdentifier) -> io::Result<()> {
