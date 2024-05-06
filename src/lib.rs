@@ -20,10 +20,9 @@ use std::{
 };
 
 use anni_playback::{types::PlayerEvent, Controls, Decoder};
-use anyhow::Context;
 use identifier::TrackIdentifier;
 // use once_cell::sync::Lazy;
-use provider::ProviderProxy;
+use provider::{AudioQuality, ProviderProxy};
 use reqwest::blocking::Client;
 
 use crate::source::CachedAnnilSource;
@@ -100,7 +99,6 @@ impl Playlist {
 
 pub struct AnniPlayer {
     pub player: Player,
-    playlist: RwLock<Playlist>,
     pub client: Client,
     provider: RwLock<TypedPriorityProvider<ProviderProxy>>,
     cache_store: CacheStore, // root of cache
@@ -116,7 +114,6 @@ impl AnniPlayer {
         (
             Self {
                 player,
-                playlist: Default::default(),
                 client: Client::new(),
                 provider: RwLock::new(provider),
                 cache_store: CacheStore::new(cache_path),
@@ -137,8 +134,8 @@ impl AnniPlayer {
         *provider = TypedPriorityProvider::new(vec![]);
     }
 
-    fn play_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
-        log::info!("opening track: {track}");
+    pub fn load(&self, track: TrackIdentifier, quality: AudioQuality) -> anyhow::Result<()> {
+        log::info!("loading track: {track}");
 
         self.player.pause();
 
@@ -147,6 +144,7 @@ impl AnniPlayer {
         let buffer_signal = Arc::new(AtomicBool::new(true));
         let source = CachedAnnilSource::new(
             track,
+            quality,
             &self.cache_store,
             self.client.clone(),
             &provider,
@@ -158,36 +156,11 @@ impl AnniPlayer {
         Ok(())
     }
 
-    pub fn open(&self, track: TrackIdentifier) -> anyhow::Result<()> {
-        self.set_track(track)?;
+    pub fn open(&self, track: TrackIdentifier, quality: AudioQuality) -> anyhow::Result<()> {
+        self.load(track, quality)?;
         self.play();
 
         Ok(())
-    }
-
-    pub fn play_next(&self) -> anyhow::Result<()> {
-        let mut pl = self.playlist.write().unwrap();
-
-        let track = pl.next_track().context("end of playlist")?;
-        self.play_track(track)?;
-        self.play();
-
-        Ok(())
-    }
-
-    pub fn set_track(&self, track: TrackIdentifier) -> anyhow::Result<()> {
-        log::info!("setting track {track} to playlist");
-
-        let mut pl = self.playlist.write().unwrap();
-        pl.set_item(track);
-        self.play_track(track)
-    }
-
-    pub fn push_track(&self, track: TrackIdentifier) {
-        log::info!("adding track {track} to playlist");
-
-        let mut pl = self.playlist.write().unwrap();
-        pl.push(track);
     }
 
     pub fn play(&self) {

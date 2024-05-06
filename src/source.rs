@@ -13,7 +13,7 @@ use anni_provider::providers::TypedPriorityProvider;
 use anyhow::anyhow;
 use reqwest::{blocking::Client, Url};
 
-use crate::{cache::CacheStore, identifier::TrackIdentifier, provider::ProviderProxy};
+use crate::{cache::CacheStore, identifier::TrackIdentifier, provider::{AudioQuality, ProviderProxy}};
 
 const BUF_SIZE: usize = 1024 * 64; // 64k
 
@@ -156,6 +156,7 @@ pub struct CachedAnnilSource(CachedHttpSource);
 impl CachedAnnilSource {
     pub fn new(
         track: TrackIdentifier,
+        quality: AudioQuality,
         cache_store: &CacheStore,
         client: Client,
         provider: &TypedPriorityProvider<ProviderProxy>,
@@ -164,7 +165,7 @@ impl CachedAnnilSource {
         let mut source = provider
             .providers()
             .filter_map(|p| {
-                p.head(track)
+                p.head(track, quality)
                     .and_then(|r| r.error_for_status())
                     .inspect_err(|e| log::warn!("{e}"))
                     .ok()
