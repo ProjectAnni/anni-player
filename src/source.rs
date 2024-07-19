@@ -13,7 +13,11 @@ use anni_provider::providers::TypedPriorityProvider;
 use anyhow::anyhow;
 use reqwest::{blocking::Client, Url};
 
-use crate::{cache::CacheStore, identifier::TrackIdentifier, provider::{AudioQuality, ProviderProxy}};
+use crate::{
+    cache::CacheStore,
+    identifier::TrackIdentifier,
+    provider::{AudioQuality, ProviderProxy},
+};
 
 const BUF_SIZE: usize = 1024 * 64; // 64k
 
@@ -48,7 +52,7 @@ impl CachedHttpSource {
                     is_buffering: Arc::new(AtomicBool::new(false)),
                     buffer_signal,
                 });
-            },
+            }
             Err(cache) => cache,
         };
 

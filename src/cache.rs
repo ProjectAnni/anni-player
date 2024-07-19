@@ -40,8 +40,11 @@ impl CacheStore {
         let mut tmp = self.base.clone();
         tmp.extend([
             track.album_id.to_string(),
-            track.disc_id.to_string(),
-            track.track_id.to_string(),
+            format!(
+                "{}_{}",
+                track.disc_id.to_string(),
+                track.track_id.to_string(),
+            ),
         ]);
         tmp
     }
@@ -51,7 +54,7 @@ impl CacheStore {
     /// On success, returns a `Result<File, File>`.
     /// If the cache exists and is valid, opens it in read mode and returns an `Ok(_)`.
     /// Otherwise, opens or creates a cache file in append mode and returns an `Err(_)`.
-    /// 
+    ///
     /// On error, an [`Error`](std::io::Error) is returned.
     pub fn acquire(&self, track: TrackIdentifier) -> io::Result<Result<File, File>> {
         let path = self.loaction_of(track);
