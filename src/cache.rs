@@ -4,26 +4,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use once_cell::sync::Lazy;
+use anni_playback::CODEC_REGISTRY;
 use symphonia::{
     core::{
-        codecs::{CodecRegistry, DecoderOptions},
-        formats::FormatOptions,
-        io::MediaSourceStream,
-        meta::MetadataOptions,
-        probe::Hint,
+        codecs::DecoderOptions, formats::FormatOptions, io::MediaSourceStream,
+        meta::MetadataOptions, probe::Hint,
     },
-    default::{get_probe, register_enabled_codecs},
+    default::get_probe,
 };
 
 use crate::identifier::TrackIdentifier;
-
-// todo: enable opus support (which is private code in anni-playback)
-static CODEC_REGISTRY: Lazy<CodecRegistry> = Lazy::new(|| {
-    let mut registry = CodecRegistry::new();
-    register_enabled_codecs(&mut registry);
-    registry
-});
 
 #[derive(Debug, Clone)]
 pub struct CacheStore {
