@@ -3,10 +3,8 @@ name = "anni-player"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-playback", rev = "9207e60" }
+anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-playback" }
 anni-provider = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-provider", default-features = false, features = [
     "priority",
 ] }
