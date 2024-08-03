@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anni-playback = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-playback" }
-anni-provider = { git = "https://github.com/ProjectAnni/anni.git", package = "anni-provider", default-features = false, features = [
+anni-provider = { version = "0.3.1", default-features = false, features = [
     "priority",
 ] }
 symphonia = { version = "0.5.4", default-features = false, features = [
